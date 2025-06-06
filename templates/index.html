@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Email Search Form</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    .date-inputs {
+      display: flex;
+      gap: 10px;
+    }
+    .date-inputs input {
+      flex: 1;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 15px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+    <h1>Email Transformation Service</h1>
+
+    <p>Stuck with an email template you website builder won't let you change automated emails onto a supplier or similar?</p>
+
+    <p>Want to search / replace (change) / transform an email body into something else and forward it on?</p>
+
+  <h3>Email Search Settings</h3>
+
+  <div id="loadingIndicator" style="display: none; margin-top: 20px; color: #555;">
+    <em>Searching emails, please wait...</em>
+  </div>
+
+
+  <form method="POST" id="emailSearchForm" action="/search-email">
+    <label for="email_host">Email Host</label>
+    <input type="text" id="email_host" name="email_host" placeholder="email.example.com" value="{{ form_data.get('email_host', '') }}" required>
+
+    <label for="email_user">Email Address</label>
+    <input type="email" id="email_user" name="email_user" placeholder="bob@example.com" required value="{{ form_data.get('email_user', '') }}">
+
+    <label for="email_password">Email Password</label>
+    <input type="password" id="email_password" name="email_password" required>
+
+    <label for="imap_search_subject">Search Subject (Optional)</label>
+    <input type="text" id="imap_search_subject" name="imap_search_subject" value="{{ form_data.get('imap_search_subject', '') }}">
+
+    <label for="imap_search_unseen">Search Unseen Only (Optional)</label>
+    <select id="imap_search_unseen" name="imap_search_unseen">
+      <option value="">-- Choose --</option>
+      <option value="1">Yes</option>
+      <option value="0">No</option>
+    </select>
+
+    <label>Search Since Date (Optional)</label>
+    <small>Enter the date in DD MM YYYY format. For example, for 1st February 2025, enter 01, 02, and 2025.</small>
+    <div class="date-inputs">
+      <input type="number" name="since_day" placeholder="DD" min="1" max="31">
+      <input type="number" name="since_month" placeholder="MM" min="1" max="12">
+      <input type="number" name="since_year" placeholder="YYYY" min="1900">
+    </div>
+
+    <button type="submit">Search Emails</button>
+  </form>
+
+
+  <div id="errorBox" style="margin-top: 20px; padding: 10px; border: 1px solid red; color: red; display: none;">
+    <h3>Error:</h3>
+    <div id="errorContent"></div>
+  </div>
+
+  <div id="resultsBox" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc; display: none;">
+    <h2>Located Email - We only show the first found email by default</h2>
+    <div id="sampleEmailContent"></div>
+
+    <h2>What would you like to do to these emails (which match that search criteria)?</h2>
+    <form id="transformEmailForm">
+      <label for="transform_email_rule_remove_all_images">Remove all images (pretty please!)</label>
+      <input type="checkbox" id="transform_email_rule_remove_all_images" name="transform_email_rule_remove_all_images" />
+    </form>
+
+    <h2>Would you like to have that happen to all emails which match that search criteria?</h2>
+
+    YES Please
+
+  </div>
+
+
+<script>
+
+  // Restore previously entered form values if present in local storage.
+  window.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('emailSearchForm');
+    const savedFields = ['email_host', 'email_user', 'imap_search_subject', 'imap_search_unseen', 'since_day', 'since_month', 'since_year'];
+
+    savedFields.forEach(field => {
+      const savedValue = localStorage.getItem(field);
+      if (savedValue !== null && form.elements[field]) {
+        form.elements[field].value = savedValue;
+      }
+    });
+  });
+
+  // Listen to form submission
+  document.getElementById('emailSearchForm').addEventListener('submit', async function (e) {
+    // Show loading indicator
+    document.getElementById('loadingIndicator').style.display = 'block';
+
+    e.preventDefault();
+    console.log("Submitted");
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+
+    // Save form data to localStorage, except password
+    Object.keys(data).forEach(key => {
+      if (key !== "email_password") {
+        localStorage.setItem(key, data[key]);
+      }
+    });
+
+    // Clear any existing messages
+    document.getElementById('resultsBox').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+
+    try {
+      const response = await fetch('/search-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        // Show error message
+        document.getElementById('errorBox').style.display = 'block';
+        document.getElementById('errorContent').textContent = result.error || 'Unknown error occurred.';
+      } else {
+        // Show sample email
+        document.getElementById('resultsBox').style.display = 'block';
+        document.getElementById('sampleEmailContent').innerHTML = result.sample_email || '<em>No email found.</em>';
+
+        // Listen for transform_email_rule_remove_all_images checkbox check
+        const transformCheckbox = document.getElementById("transform_email_rule_remove_all_images");
+        if (transformCheckbox && sampleEmailContent) {
+          const originalRawEmailContent = sampleEmailContent.innerHTML;
+          transformCheckbox.addEventListener("change", () => {
+            if (transformCheckbox.checked) {
+              sampleEmailContent.innerHTML = sampleEmailContent.innerHTML.replace(/<img\b[^>]*>/gi, '');
+            } else {
+              sampleEmailContent.innerHTML = originalRawEmailContent;
+            }
+          });
+        }
+
+      }
+    } catch (err) {
+      // Show fetch/network error
+      document.getElementById('errorBox').style.display = 'block';
+      document.getElementById('errorContent').textContent = 'Network error or server not responding.';
+    } finally {
+      // Hide loading indicator regardless of success/failure
+      document.getElementById('loadingIndicator').style.display = 'none';
+    }
+  });
+
+</script>
+</body>
+</html>
