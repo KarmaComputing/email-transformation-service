@@ -55,10 +55,10 @@
     <input type="text" id="email_host" name="email_host" placeholder="email.example.com" value="{{ form_data.get('email_host', '') }}" required>
 
     <label for="email_user">Email Address</label>
-    <input type="email" id="email_user" name="email_user" placeholder="bob@example.com" required value="{{ form_data.get('email_user', '') }}">
+    <input type="email" id="email_user" name="email_user" placeholder="bob@example.com" autocomplete="username" required value="{{ form_data.get('email_user', '') }}">
 
     <label for="email_password">Email Password</label>
-    <input type="password" id="email_password" name="email_password" required>
+    <input type="password" id="email_password" name="email_password" autocomplete="current-password" required>
 
     <label for="imap_search_subject">Search Subject (Optional)</label>
     <input type="text" id="imap_search_subject" name="imap_search_subject" value="{{ form_data.get('imap_search_subject', '') }}">
@@ -79,6 +79,16 @@
     </div>
 
     <button type="submit">Search Emails</button>
+    <h2>What would you like to do to these emails (which match that search criteria)?</h2>
+    <form id="transformEmailForm">
+      <label for="transform_email_create_simplified_fulfilment_sheet">Reduce Wix fulfilment to simplified sheet</label>
+      <input type="checkbox" id="transform_email_create_simplified_fulfilment_sheet" onclick="createSimplifiedWixFulfilmentSheet()" name="transform_email_create_simplified_fulfilment_sheet" />
+      <br />
+      <label for="transform_email_rule_remove_all_images">Remove all images (pretty please!)</label>
+      <input type="checkbox" id="transform_email_rule_remove_all_images" name="transform_email_rule_remove_all_images" />
+    </form>
+
+    <div id="simpleTableWrapper"></div>
   </form>
 
 
@@ -91,20 +101,9 @@
     <h2>Located Email - We only show the first found email by default</h2>
     <div id="sampleEmailContent"></div>
 
-    <h2>What would you like to do to these emails (which match that search criteria)?</h2>
-    <form id="transformEmailForm">
-      <label for="transform_email_rule_remove_all_images">Remove all images (pretty please!)</label>
-      <input type="checkbox" id="transform_email_rule_remove_all_images" name="transform_email_rule_remove_all_images" />
-    </form>
 
-    <h2>Would you like to have that happen to all emails which match that search criteria?</h2>
-
-    YES Please
 
   </div>
-
-  <h1>Our new swanky fullfillment email</h1>
-  <div id="simpleTableWrapper"></div>
 
 <script>
 
@@ -123,7 +122,6 @@
 
   // Listen to form submission
   document.getElementById('emailSearchForm').addEventListener('submit', async function (e) {
-    alert("hello");
     // Show loading indicator
     document.getElementById('loadingIndicator').style.display = 'block';
 
@@ -259,7 +257,7 @@
     table.style.marginTop = "20px";
 
     // Append table to body
-    document.getElementById("simpleTableWrapper").appendChild(table);
+    document.getElementById("simpleTableWrapper").prepend(table);
   }
 
 
@@ -296,17 +294,109 @@
   function getDeliveryContactNumber() {
     return parentElement.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling.children[0].textContent;
   }
-  
 
-  // TODO
-  // Get Delivery Details
+  function createOrderSheetHeader() {
+    const container = document.createElement("div");
+    container.style.margin = "20px 0";
+    container.style.padding = "10px";
+    container.style.border = "1px solid #ccc";
+    container.style.borderRadius = "8px";
+    container.style.fontFamily = "Arial, sans-serif";
+    container.style.maxWidth = "600px";
 
-  // Get Contact details
+    // Helper to create a row
+    function createRow(label, value) {
+      const row = document.createElement("p");
+      row.innerHTML = `<strong>${label}:</strong> ${value}`;
+      return row;
+    }
 
-  function justDoit() {
+    try {
+      container.appendChild(createRow("Order Number", getOrderNumber()));
+    } catch (e) {
+      console.warn("Order Number not found");
+    }
+
+    try {
+      container.appendChild(createRow("Total Qty", getTotalQty()));
+    } catch (e) {
+      console.warn("Total Qty not found");
+    }
+
+    try {
+      container.appendChild(createRow("Total Unique Products", getTotalQtyOfUniqueProducts()));
+    } catch (e) {
+      console.warn("Total Unique Products not found");
+    }
+
+    try {
+      container.appendChild(createRow("Order Placed Date", getOrderPlacedDate()));
+    } catch (e) {
+      console.warn("Order Placed Date not found");
+    }
+
+    try {
+      container.appendChild(createRow("Chosen Delivery Date", getChosenDeliveryDate()));
+    } catch (e) {
+      console.warn("Delivery Date not found");
+    }
+
+    try {
+      // This needed correction
+      const shippingElement = document.getElementsByClassName("x_shipping-method-content")[0];
+      const deliveryPersonElement = shippingElement
+        .parentElement.nextElementSibling.nextElementSibling
+        .children[0].children[0];
+      container.appendChild(createRow("Delivery Person", deliveryPersonElement.textContent.trim()));
+    } catch (e) {
+      console.warn("Delivery Person not found");
+    }
+
+    try {
+      const shippingElement = document.getElementsByClassName("x_shipping-method-content")[0];
+      const deliveryAddressElement = shippingElement
+        .parentElement.nextElementSibling.nextElementSibling
+        .children[0].children[1];
+      container.appendChild(createRow("Delivery Address", deliveryAddressElement.textContent.trim()));
+    } catch (e) {
+      console.warn("Delivery Address not found");
+    }
+
+    try {
+      // Correction: Reference the correct parent before chaining
+      const shippingElement = document.getElementsByClassName("x_shipping-method-content")[0];
+      const contactNumberElement = shippingElement
+        .parentElement.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling
+        .children[0];
+      container.appendChild(createRow("Delivery Contact Number", contactNumberElement.textContent.trim()));
+    } catch (e) {
+      console.warn("Contact Number not found");
+    }
+
+    // Append to DOM
+    simpleTableWrapper.prepend(container);
+  }
+
+
+  function createSimplifiedWixFulfilmentSheet(){
+    /*
+      Wix's fulfilment email is overly verbose, includes
+      images and much spaced- some suppliers don't want
+      all that decoration (because fulfilment sheets are
+      printed).
+      This strips the fulfilment email of that is considered
+      excess *by the fulfilment destination* and produces
+      a stripped down fulfilment sheet, black & white only
+      with no images and minimal excess spacing.
+    */
+    // Clear output box
+    simpleTableWrapper.textContent = '';
     products = extract_products();
     createProductsTable(products);
+    createOrderSheetHeader();
   }
+
+  </script>
 
 
 </body>
