@@ -38,7 +38,6 @@
 </head>
 <body>
 
-    <h1>Email Transformation Service</h1>
 
     <p>Stuck with an email template you website builder won't let you change automated emails onto a supplier or similar?</p>
 
@@ -104,6 +103,8 @@
 
   </div>
 
+  <h1>Our new swanky fullfillment email</h1>
+  <div id="simpleTableWrapper"></div>
 
 <script>
 
@@ -122,6 +123,7 @@
 
   // Listen to form submission
   document.getElementById('emailSearchForm').addEventListener('submit', async function (e) {
+    alert("hello");
     // Show loading indicator
     document.getElementById('loadingIndicator').style.display = 'block';
 
@@ -187,6 +189,125 @@
     }
   });
 
-</script>
+
+  ///  Product extraction stuff
+
+  function extract_products() {
+    product_names_in_html_table = document.getElementsByClassName("x_item-name");
+    product_quantities_in_html_table = document.getElementsByClassName("x_item-qty");
+    product_names = [];
+    products = [];
+    for(var i=0; i < product_names_in_html_table.length; i++) {
+      console.log(product_names_in_html_table[i].textContent);
+      product_names.push(product_names_in_html_table[i].textContent);
+      found_product = {
+        "name": product_names_in_html_table[i].textContent,
+        "sku": product_names_in_html_table[i].parentElement.parentElement.children[1].textContent.replace("SKU: ", "").trim(),
+        "qty": product_quantities_in_html_table[i].textContent.replaceAll(" ", "").replace("Qty:\n", "")
+        }
+
+      products.push(found_product);
+    }
+    return products;
+  }
+
+  function createProductsTable(products) {
+    // Create table and thead
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+
+    // Create header cells
+    const headers = ["Product Name", "SKU", "Qty"];
+    headers.forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Style the table
+    table.style.width = "100%";
+
+    // Create tbody
+    const tbody = document.createElement("tbody");
+
+    products.forEach(product => {
+      const row = document.createElement("tr");
+
+      const nameCell = document.createElement("td");
+      nameCell.textContent = product.name;
+      row.appendChild(nameCell);
+
+      const skuCell = document.createElement("td");
+      skuCell.textContent = product.sku;
+      row.appendChild(skuCell);
+
+      const qtyCell = document.createElement("td");
+      qtyCell.textContent = product.qty;
+      row.appendChild(qtyCell);
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+
+    // Optional: Add some basic styles
+    table.border = "1";
+    table.style.borderCollapse = "collapse";
+    table.style.marginTop = "20px";
+
+    // Append table to body
+    document.getElementById("simpleTableWrapper").appendChild(table);
+  }
+
+
+  function getOrderNumber() {
+    let orderNumber = document.getElementsByClassName("x_title-cell")[0].textContent.replaceAll("\n","").split("#")[1];
+    return orderNumber;
+  }
+
+  function getTotalQty() {
+    return document.getElementsByClassName("x_header-total-unique-items-number-cell")[0].textContent.split(":")[1].trim();
+  }
+
+  function getTotalQtyOfUniqueProducts() {
+    return document.getElementsByClassName("x_header-total-items-number-cell")[0].textContent.split(":")[1].trim();
+  }
+
+  function getOrderPlacedDate() {
+    return document.getElementsByClassName("x_order-details-value")[1].textContent;
+  }
+
+  function getChosenDeliveryDate() {
+    return document.getElementsByClassName("x_shipping-method-content")[0].textContent.replaceAll("\n","").split("(")[1].trim().replace(")","");
+  }
+
+  function getDeliveryPersonName() {
+    return document.getElementsByClassName("x_shipping-method-content").parentElement.nextElementSibling.nextElementSibling.children[0].children[0];
+
+  }
+
+  function getDeliveryAddress() {
+    return document.getElementsByClassName("x_shipping-method-content").parentElement.nextElementSibling.nextElementSibling.children[0].children[1].textContent.trim();
+  }
+
+  function getDeliveryContactNumber() {
+    return parentElement.nextElementSibling.nextElementSibling.nextElementSibling.nextElementSibling.children[0].textContent;
+  }
+  
+
+  // TODO
+  // Get Delivery Details
+
+  // Get Contact details
+
+  function justDoit() {
+    products = extract_products();
+    createProductsTable(products);
+  }
+
+
 </body>
 </html>
