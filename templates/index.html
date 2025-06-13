@@ -37,8 +37,7 @@
   </style>
 </head>
 <body>
-
-
+    <a href="{{ url_for('connect_outlook') }}">Connect Outlook</a>
     <p>Stuck with an email template you website builder won't let you change automated emails onto a supplier or similar?</p>
 
     <p>Want to search / replace (change) / transform an email body into something else and forward it on?</p>
@@ -52,13 +51,22 @@
 
   <form method="POST" id="emailSearchForm" action="/search-email">
     <label for="email_host">Email Host</label>
-    <input type="text" id="email_host" name="email_host" placeholder="email.example.com" value="{{ form_data.get('email_host', '') }}" required>
+    <input type="text" id="email_host" name="email_host" placeholder="email.example.com"
+    {% if session.get('oauth_token') %}
+      value="imap-mail.outlook.com"
+    {% else %}
+      value="{{ form_data.get('email_host', '') }}"
+    {% endif %}
+    required>
 
     <label for="email_user">Email Address</label>
     <input type="email" id="email_user" name="email_user" placeholder="bob@example.com" autocomplete="username" required value="{{ form_data.get('email_user', '') }}">
 
-    <label for="email_password">Email Password</label>
-    <input type="password" id="email_password" name="email_password" autocomplete="current-password" required>
+    {% if session.get('oauth_token') is sameas None %}
+    {# Don't ask for password if using oauth authentication #}
+      <label for="email_password">Email Password</label>
+      <input type="password" id="email_password" name="email_password" autocomplete="current-password" required>
+    {% endif %}
 
     <label for="imap_search_subject">Search Subject (Optional)</label>
     <input type="text" id="imap_search_subject" name="imap_search_subject" value="{{ form_data.get('imap_search_subject', '') }}">

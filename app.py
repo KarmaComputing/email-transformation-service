@@ -1,4 +1,13 @@
-from flask import Flask, render_template, request, jsonify
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    session,
+    redirect,
+    url_for,
+)  # noqa: E501
+from requests_oauthlib import OAuth2Session
 import imaplib
 import socket
 from email import policy
@@ -6,8 +15,26 @@ from email.parser import BytesParser
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional
+from dotenv import dotenv_values
+import background
+
+
+config = dotenv_values(".env")
+
+client_id = config["OAUTH_MICROSOFT_ENTRE_CLIENT_ID"]
+client_secret = config["OAUTH_MICROSOFT_ENTRE_CLIENT_SECRET"]
+redirect_uri = "https://localhost:5000/oauth/callback"
+authorization_base_url = (
+    "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"  # noqa: E501
+)
+token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+scope = [
+    "https://outlook.office365.com/IMAP.AccessAsUser.All",
+    "offline_access",
+]  # noqa: E501
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = config["SECRET_KEY"]
 
 
 @dataclass
@@ -22,6 +49,52 @@ class EmailSearchSettings:
 
 class EmailSearchError(Exception):
     pass
+
+
+@background.task
+def listen_for_emails(settings: EmailSearchSettings, session_context: dict):
+    """
+    In the background, keep checking for
+    emails which match criteria.
+
+    settings: Email login details and search settings
+    session_context: Dict. Copy of flask session (dict(session))
+    """
+    import time
+
+    print("Listening for emails")
+    while True:
+        print("Check emails")
+        raw_emails = do_search_email(
+            session_context,
+            settings,
+            return_raw_email=True,
+            outlook_auth=True,
+        )  # noqa: E501
+        print(f"Found: {raw_emails}")
+        time.sleep(1)
+
+
+@app.route("/connect/outlook")
+def connect_outlook():
+    oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=scope)
+    authorization_url, state = oauth.authorization_url(authorization_base_url)
+    session["oauth_state"] = state
+    return redirect(authorization_url)
+
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    oauth = OAuth2Session(
+        client_id, redirect_uri=redirect_uri, state=session["oauth_state"]
+    )
+    token = oauth.fetch_token(
+        token_url,
+        client_secret=client_secret,
+        authorization_response=request.url,  # noqa: E501
+    )
+    session["oauth_token"] = token
+    return redirect(url_for("index"))
 
 
 @app.route("/")
@@ -58,12 +131,21 @@ def search_email():
         email_password=data.get("email_password"),
         imap_search_subject=data.get("imap_search_subject"),
         imap_search_unseen=(
-            int(data["imap_search_unseen"]) if data.get("imap_search_unseen") else None  # noqa
+            int(data["imap_search_unseen"])
+            if data.get("imap_search_unseen")
+            else None  # noqa
         ),
         imap_search_since_date=imap_search_since_date,
     )
+    print("Starting to always listen for emails")
+    listen_for_emails(settings, dict(session))
     try:
-        raw_emails = do_search_email(settings, return_raw_email=True)
+        raw_emails = do_search_email(
+            dict(session),
+            settings,
+            return_raw_email=True,
+            outlook_auth=True,
+        )  # noqa: E501
         # Take the first raw email message so we can display it to the user
         if len(raw_emails) == 0:
             sample_email = "No email found with that search criteria"
@@ -78,12 +160,27 @@ def search_email():
 
 
 def do_search_email(
-    settings: EmailSearchSettings, json_output=False, return_raw_email=False
+    session_context,
+    settings: EmailSearchSettings,
+    json_output=False,
+    return_raw_email=False,
+    outlook_auth=False,
 ):
+    """
+    session_context: dict, copy of flask session (dict(session))
+                     so that we don't have to deal with 'operating
+                     outside of application context'.
+    """
     try:
         # Attempt connection and login
-        imap = imaplib.IMAP4_SSL(settings.email_host)
-        imap.login(settings.email_user, settings.email_password)
+        if outlook_auth:
+            imap = imaplib.IMAP4_SSL(settings.email_host)
+            bearer_token = session_context.get("oauth_token")["access_token"]
+            auth_string = f"user={settings.email_user}\x01auth=Bearer {bearer_token}\x01\x01"  # noqa: E501
+            imap.authenticate("XOAUTH2", lambda x: auth_string.encode())
+        else:
+            imap = imaplib.IMAP4_SSL(settings.email_host)
+            imap.login(settings.email_user, settings.email_password)
         imap.select("Inbox")
     except socket.gaierror:
         raise EmailSearchError(
@@ -92,6 +189,7 @@ def do_search_email(
     except imaplib.IMAP4.error as e:
         raise EmailSearchError(f"IMAP login/select failed: {str(e)}")
     except Exception as e:
+        print(f"{e}")
         raise EmailSearchError(f"Unexpected error: {str(e)}")
 
     # Build search criteria
